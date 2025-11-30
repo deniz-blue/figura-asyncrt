@@ -1,14 +1,13 @@
--- AsyncRT by deniz.blue
+-- AsyncRT 0.0.2 by deniz.blue
 
 ---@type [Future, function|nil, function|nil][]
 local queue = {}
 
 local function addToQueue(fut, res, rej)
-    -- log("Added to queue", { fut,res,rej })
     table.insert(queue, {
-        fut,
-        res,
-        rej,
+        [1] = fut,
+        [2] = res,
+        [3] = rej,
     })
 end
 
@@ -18,7 +17,7 @@ events.WORLD_TICK:register(function()
         local success, value = pcall(fut.getOrError, fut)
 
         if not success then
-            if rej ~= nil then rej(error) end
+            if rej ~= nil then rej(value) end
             table.remove(queue, i)
         elseif fut:isDone() then
             if res ~= nil then res(value) end
@@ -30,8 +29,9 @@ end)
 -- Extensions
 
 local FutureMeta = figuraMetatables.Future.__index
+local InputStreamMeta = figuraMetatables.InputStream.__index
+local NetworkingAPI__index = figuraMetatables.NetworkingAPI.__index
 
--- TODO: export newFuture in NetworkingAPI
 local function newFuture()
     local value = nil
     local isComplete = false
@@ -79,6 +79,11 @@ local function newFuture()
     return fut, complete, err
 end
 
+function figuraMetatables.NetworkingAPI:__index(key)
+    if key == "newFuture" then return newFuture end
+    return NetworkingAPI__index(self, key)
+end
+
 function FutureMeta:hasError()
     local success = pcall(self.getOrError, self)
     return not success;
@@ -92,19 +97,19 @@ end
 
 function FutureMeta:onFinish(cb)
     addToQueue(self, cb, nil)
+    return self
 end
 
 function FutureMeta:onFinishError(cb)
     addToQueue(self, nil, cb)
+    return self
 end
-
-local InputStreamMeta = figuraMetatables.InputStream.__index
 
 function InputStreamMeta:readAllAsync()
     local stream = self
     local data = {}
 
-    local --[[@as Future.String]] fut, complete, err = newFuture();
+    local --[[@as Future.String]] fut, complete, err = net.newFuture();
 
     local function poll()
         stream:readAsync()
